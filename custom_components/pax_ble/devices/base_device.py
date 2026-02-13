@@ -28,7 +28,6 @@ class BaseDevice:
         self._pin = pin
         self._client: BleakClientWithServiceCache | None = None
         self._connect_lock = asyncio.Lock()
-        self._disconnect_callback = None
         # Characteristic UUIDs (centralized in characteristics.py ideally)
         self.chars = {
             CHARACTERISTIC_APPEARANCE: "00002a01-0000-1000-8000-00805f9b34fb",  # Not used
@@ -51,10 +50,6 @@ class BaseDevice:
             CHARACTERISTIC_SERIAL_NUMBER: "00002a25-0000-1000-8000-00805f9b34fb",  # Not used
             CHARACTERISTIC_STATUS: "25a824ad-3021-4de9-9f2f-60cf8d17bded",
         }
-
-    def set_disconnect_callback(self, callback):
-        """Set callback to be called when device disconnects unexpectedly."""
-        self._disconnect_callback = callback
 
     def _handle_disconnect(self, _client):
         """Handle unexpected disconnection.
@@ -82,35 +77,42 @@ class BaseDevice:
                     raise BleakError(f"Device {self._mac} not found")
 
                 try:
-                    await close_stale_connections()
+                    await asyncio.wait_for(close_stale_connections(), timeout=5.0)
                 except Exception:
                     pass
 
-                self._client = await establish_connection(
-                    BleakClientWithServiceCache,
-                    device,
-                    name=getattr(self, "name", self._mac),
-                    disconnected_callback=self._handle_disconnect,
-                    use_services_cache=True,
-                    max_attempts=5,
-                    retry_interval=1.0,
+                self._client = await asyncio.wait_for(
+                    establish_connection(
+                        BleakClientWithServiceCache,
+                        device,
+                        name=getattr(self, "name", self._mac),
+                        disconnected_callback=self._handle_disconnect,
+                        use_services_cache=True,
+                        max_attempts=3,
+                        retry_interval=0.5,
+                    ),
                     timeout=timeout,
                 )
                 _LOGGER.debug("Connected to %s", self._mac)
                 return True
+            except asyncio.TimeoutError:
+                _LOGGER.warning("Connection to %s timed out after %ds", self._mac, timeout)
+                self._client = None
+                return False
             except Exception as err:
                 _LOGGER.warning("Failed to connect %s: %s", self._mac, err)
                 self._client = None
                 return False
 
     async def disconnect(self) -> None:
-        if self._client:
-            try:
-                await self._client.disconnect()
-            except Exception as e:
-                _LOGGER.warning("Error disconnecting %s: %s", self._mac, e)
-            finally:
-                self._client = None
+        async with self._connect_lock:
+            if self._client:
+                try:
+                    await asyncio.wait_for(self._client.disconnect(), timeout=5.0)
+                except Exception as e:
+                    _LOGGER.warning("Error disconnecting %s: %s", self._mac, e)
+                finally:
+                    self._client = None
 
     async def _with_disconnect_on_error(self, coro):
         try:
