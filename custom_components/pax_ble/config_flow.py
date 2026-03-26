@@ -355,6 +355,8 @@ class PaxOptionsFlowHandler(OptionsFlow):
             except Exception as e:
                 _LOGGER.error("Error during pairing: %s", e)
                 errors["base"] = "pairing_failed"
+            finally:
+                await fan.disconnect()
         else:
             errors["base"] = "connection_failed"
 

@@ -5,7 +5,7 @@ import logging
 from abc import ABC, abstractmethod
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .devices.base_device import BaseDevice
 
@@ -13,16 +13,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class BaseCoordinator(DataUpdateCoordinator, ABC):
-    _fast_poll_enabled = False
-    _fast_poll_count = 0
-    _normal_poll_interval = 60
-    _fast_poll_interval = 10
-
-    _deviceInfoLoaded = False
-    _last_config_timestamp = None
-
-    # Should be set by a child class
-    _fan: BaseDevice | None = None  # This is basically a type hint
 
     def __init__(
         self,
@@ -36,18 +26,21 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         super().__init__(
             hass,
             _LOGGER,
-            # Name of the data. For logging purposes.
             name=model + ": " + device.name,
-            # Polling interval. Will only be polled if there are subscribers.
             update_interval=dt.timedelta(seconds=scan_interval),
         )
 
+        self._fan: BaseDevice | None = None  # Set by subclass
+        self._device = device
+        self._model = model
+
+        self._fast_poll_enabled = False
+        self._fast_poll_count = 0
         self._normal_poll_interval = scan_interval
         self._fast_poll_interval = scan_interval_fast
 
-        self._fan: BaseDevice | None = None  # Base class for Calima/Svensa
-        self._device = device
-        self._model = model
+        self._deviceInfoLoaded = False
+        self._last_config_timestamp = None
 
         # Adaptive poll backoff: tracks consecutive failed poll cycles
         self._consecutive_poll_failures = 0
@@ -80,7 +73,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         self._fast_poll_enabled = True
         self._fast_poll_count = 0
         self.update_interval = dt.timedelta(seconds=self._fast_poll_interval)
-        self._schedule_refresh()
+        self.async_request_refresh()
 
     def setNormalPollMode(self):
         """Return to normal polling, with backoff if there have been failures."""
@@ -164,16 +157,17 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
                         _LOGGER.info("Successful read from %s, resetting backoff", self.devicename)
                         self._consecutive_poll_failures = 0
                         self.setNormalPollMode()
-                    return
+                    return self._state
         except asyncio.CancelledError:
             raise
         except Exception as err:
             _LOGGER.debug("Failed fetching sensor data for %s: %s", self.devicename, err)
 
         # If we reach here, sensor read failed — increase backoff
-        self._consecutive_poll_failures += 1
+        self._consecutive_poll_failures = min(self._consecutive_poll_failures + 1, 20)
         _LOGGER.debug("Poll failure %d for %s", self._consecutive_poll_failures, self.devicename)
         self.setNormalPollMode()
+        raise UpdateFailed("Failed to read sensor data from %s" % self.devicename)
 
     async def _async_update_device_info(self) -> None:
         device_registry = dr.async_get(self.hass)
@@ -203,12 +197,8 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
 
     async def read_deviceinfo(self, disconnect=False) -> bool:
         _LOGGER.debug("Reading device information")
-        try:
-            # Make sure we are connected
-            if not await self._safe_connect():
-                raise Exception("Not connected!")
-        except Exception as e:
-            _LOGGER.warning("Error when fetching device info: %s", str(e))
+        if not await self._safe_connect():
+            _LOGGER.warning("Cannot read device info: not connected to %s", self.devicename)
             return False
 
         # Fetch data. Some data may not be availiable, that's okay.

@@ -33,29 +33,25 @@ class SvensaCoordinator(BaseCoordinator):
             BoostMode = await self._fan.getBoostMode()  # Sensors?
             Pause = await self._fan.getPause()
 
-            if FanState is None:
-                _LOGGER.debug("Could not read data")
-                return False
+            self._state["humidity"] = FanState.Humidity
+            self._state["airquality"] = FanState.AirQuality
+            self._state["temperature"] = FanState.Temp
+            self._state["light"] = FanState.Light
+            self._state["rpm"] = FanState.RPM
+            if FanState.RPM > 400:
+                self._state["flow"] = int(FanState.RPM * 0.05076 - 14)
             else:
-                self._state["humidity"] = FanState.Humidity
-                self._state["airquality"] = FanState.AirQuality
-                self._state["temperature"] = FanState.Temp
-                self._state["light"] = FanState.Light
-                self._state["rpm"] = FanState.RPM
-                if FanState.RPM > 400:
-                    self._state["flow"] = int(FanState.RPM * 0.05076 - 14)
-                else:
-                    self._state["flow"] = 0
-                self._state["state"] = FanState.Mode
+                self._state["flow"] = 0
+            self._state["state"] = FanState.Mode
 
-                self._state["boostmode"] = BoostMode.OnOff
-                self._state["boostmodespeedread"] = BoostMode.Speed
-                self._state["boostmodesecread"] = BoostMode.Seconds
+            self._state["boostmode"] = BoostMode.OnOff
+            self._state["boostmodespeedread"] = BoostMode.Speed
+            self._state["boostmodesecread"] = BoostMode.Seconds
 
-                self._state["pause"] = Pause.PauseActive
-                self._state["pauseminread"] = Pause.PauseMinutes
-                if not Pause.PauseActive:
-                    self._state["pausemin"] = Pause.PauseMinutes
+            self._state["pause"] = Pause.PauseActive
+            self._state["pauseminread"] = Pause.PauseMinutes
+            if not Pause.PauseActive:
+                self._state["pausemin"] = Pause.PauseMinutes
 
             if disconnect:
                 await self._fan.disconnect()
@@ -63,6 +59,7 @@ class SvensaCoordinator(BaseCoordinator):
 
         except Exception as e:
             _LOGGER.debug("Error reading sensor data from %s: %s", self.devicename, str(e))
+            await self._fan.disconnect()
             return False
 
     async def write_data(self, key) -> bool:
@@ -124,10 +121,6 @@ class SvensaCoordinator(BaseCoordinator):
                         bool(self._state["pause"]),
                         int(self._state["pausemin"]),
                     )
-
-                case "sensitivity_light":
-                    # Should we do anything here?
-                    pass
 
                 case _:
                     return False
@@ -191,4 +184,5 @@ class SvensaCoordinator(BaseCoordinator):
 
         except Exception as e:
             _LOGGER.debug("Error reading config data from %s: %s", self.devicename, str(e))
+            await self._fan.disconnect()
             return False

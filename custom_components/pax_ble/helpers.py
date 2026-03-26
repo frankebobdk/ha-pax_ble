@@ -24,17 +24,21 @@ def getCoordinator(hass, device_data, dev):
     scan_interval_fast = device_data[CONF_SCAN_INTERVAL_FAST]
 
     # Set up coordinator
-    coordinator = None
-    match DeviceModel(model):
+    try:
+        device_model = DeviceModel(model)
+    except ValueError:
+        _LOGGER.error("Unknown fan model: %s", model)
+        return None
+
+    match device_model:
         case DeviceModel.CALIMA | DeviceModel.SVARA | DeviceModel.LEVANTE:
-            coordinator = CalimaCoordinator(
+            return CalimaCoordinator(
                 hass, dev, model, mac, pin, scan_interval, scan_interval_fast
             )
         case DeviceModel.SVENSA:
-            coordinator = SvensaCoordinator(
+            return SvensaCoordinator(
                 hass, dev, model, mac, pin, scan_interval, scan_interval_fast
             )
         case _:
-            _LOGGER.debug("Unknown fan model")
-
-    return coordinator
+            _LOGGER.error("Unhandled fan model: %s", model)
+            return None

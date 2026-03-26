@@ -49,6 +49,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: PaxBleConfigEntry) -> bo
         )
 
         coordinator = getCoordinator(hass, device_data, dev)
+        if coordinator is None:
+            _LOGGER.error("Skipping device %s: unsupported model", name)
+            continue
+
         # Don't block setup on initial connection - let it happen in background
         try:
             await asyncio.wait_for(coordinator.async_request_refresh(), timeout=30)
@@ -93,7 +97,7 @@ async def service_request_update(hass, call: ServiceCall):
             continue
         for coordinator in entry.runtime_data.devices.values():
             if getattr(coordinator, "device_id", None) == device_id:
-                await coordinator._async_update_data()
+                await coordinator.async_request_refresh()
                 return
 
     _LOGGER.warning("No coordinator found for device ID %s", device_id)

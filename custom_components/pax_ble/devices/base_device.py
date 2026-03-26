@@ -58,7 +58,12 @@ class BaseDevice:
         Reconnection is handled lazily on the next poll cycle.
         """
         _LOGGER.debug("Device %s disconnected, will reconnect on next poll", self._mac)
-        self._client = None
+        # Safe to set None here: _handle_disconnect is called by bleak when
+        # the connection drops. The lock isn't needed because we're only
+        # clearing the reference — connect() will acquire the lock and create
+        # a new client. We check is_connected inside the lock in connect().
+        if self._client is _client:
+            self._client = None
 
     async def authorize(self):
         await self.setAuth(self._pin)
@@ -139,8 +144,8 @@ class BaseDevice:
             return True
         except Exception as e:
             _LOGGER.debug("Connection validation failed for %s: %s", self._mac, e)
-            # Mark as disconnected so next operation will reconnect
-            self._client = None
+            # Disconnect properly under the lock
+            await self.disconnect()
             return False
 
     def _bToStr(self, val) -> str:

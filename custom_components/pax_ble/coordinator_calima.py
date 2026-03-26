@@ -33,23 +33,19 @@ class CalimaCoordinator(BaseCoordinator):
             FanState = await self._fan.getState()  # Sensors
             BoostMode = await self._fan.getBoostMode()  # Sensors?
 
-            if FanState is None:
-                _LOGGER.debug("Could not read data")
-                return False
+            self._state["humidity"] = FanState.Humidity
+            self._state["temperature"] = FanState.Temp
+            self._state["light"] = FanState.Light
+            self._state["rpm"] = FanState.RPM
+            if FanState.RPM > 400:
+                self._state["flow"] = int(FanState.RPM * 0.05076 - 14)
             else:
-                self._state["humidity"] = FanState.Humidity
-                self._state["temperature"] = FanState.Temp
-                self._state["light"] = FanState.Light
-                self._state["rpm"] = FanState.RPM
-                if FanState.RPM > 400:
-                    self._state["flow"] = int(FanState.RPM * 0.05076 - 14)
-                else:
-                    self._state["flow"] = 0
-                self._state["state"] = FanState.Mode
+                self._state["flow"] = 0
+            self._state["state"] = FanState.Mode
 
-                self._state["boostmode"] = BoostMode.OnOff
-                self._state["boostmodespeedread"] = BoostMode.Speed
-                self._state["boostmodesecread"] = BoostMode.Seconds
+            self._state["boostmode"] = BoostMode.OnOff
+            self._state["boostmodespeedread"] = BoostMode.Speed
+            self._state["boostmodesecread"] = BoostMode.Seconds
 
             if disconnect:
                 await self._fan.disconnect()
@@ -57,6 +53,7 @@ class CalimaCoordinator(BaseCoordinator):
 
         except Exception as e:
             _LOGGER.debug("Error reading sensor data from %s: %s", self.devicename, str(e))
+            await self._fan.disconnect()
             return False
 
     async def write_data(self, key) -> bool:
@@ -136,7 +133,8 @@ class CalimaCoordinator(BaseCoordinator):
         try:
             # Make sure we are connected
             if not await self._safe_connect():
-                raise Exception("Not connected!")
+                _LOGGER.debug("Cannot read config data: not connected to %s", self.devicename)
+                return False
 
             AutomaticCycles = await self._fan.getAutomaticCycles()  # Configuration
             self._state["automatic_cycles"] = AutomaticCycles
@@ -189,4 +187,5 @@ class CalimaCoordinator(BaseCoordinator):
 
         except Exception as e:
             _LOGGER.debug("Error reading config data from %s: %s", self.devicename, str(e))
+            await self._fan.disconnect()
             return False
