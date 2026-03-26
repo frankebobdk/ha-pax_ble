@@ -13,26 +13,21 @@ from .const import (
     DOMAIN,
     PLATFORMS,
     CONF_NAME,
-    CONF_MODEL,
     CONF_MAC,
-    CONF_PIN,
-    CONF_SCAN_INTERVAL,
-    CONF_SCAN_INTERVAL_FAST,
 )
+from .data import PaxBleData
 from .helpers import getCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+type PaxBleConfigEntry = ConfigEntry[PaxBleData]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+
+async def async_setup_entry(hass: HomeAssistant, entry: PaxBleConfigEntry) -> bool:
     """Set up Pax BLE from a config entry."""
     _LOGGER.debug("Setting up configuration for Pax BLE!")
-    hass.data.setdefault(DOMAIN, {})
 
-    # Set up per-entry data storage
-    if entry.entry_id not in hass.data[DOMAIN]:
-        hass.data[DOMAIN][entry.entry_id] = {}
-    hass.data[DOMAIN][entry.entry_id][CONF_DEVICES] = {}
+    runtime_data = PaxBleData()
 
     # Create one coordinator for each device
     first_iteration = True
@@ -62,14 +57,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as e:
             _LOGGER.warning("Initial connection to %s failed, will retry in background: %s", name, e)
 
-        hass.data[DOMAIN][entry.entry_id][CONF_DEVICES][device_id] = coordinator
+        runtime_data.devices[device_id] = coordinator
 
-    # Avoid forwarding platforms multiple times
-    if not hass.data[DOMAIN][entry.entry_id].get("forwarded"):
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-        hass.data[DOMAIN][entry.entry_id]["forwarded"] = True
-    else:
-        _LOGGER.debug("Platforms already forwarded for entry %s", entry.entry_id)
+    entry.runtime_data = runtime_data
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Set up update listener
     entry.async_on_unload(entry.add_update_listener(update_listener))
@@ -96,10 +88,10 @@ async def service_request_update(hass, call: ServiceCall):
         return
 
     # Find the coordinator corresponding to the given device ID
-    for entry_id, entry_data in hass.data[DOMAIN].items():
-        if not isinstance(entry_data, dict) or CONF_DEVICES not in entry_data:
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if not hasattr(entry, "runtime_data") or entry.runtime_data is None:
             continue
-        for coordinator in entry_data[CONF_DEVICES].values():
+        for coordinator in entry.runtime_data.devices.values():
             if getattr(coordinator, "device_id", None) == device_id:
                 await coordinator._async_update_data()
                 return
@@ -118,18 +110,17 @@ async def async_migrate_entry(hass, config_entry: ConfigEntry):
     return True
 
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
+async def update_listener(hass: HomeAssistant, entry: PaxBleConfigEntry):
     _LOGGER.debug("Updating Pax BLE entry!")
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: PaxBleConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.debug("Unloading Pax BLE entry!")
 
     # Make sure we are disconnected
-    devices = hass.data[DOMAIN].get(entry.entry_id, {}).get(CONF_DEVICES, {})
-    for dev_id, coordinator in devices.items():
+    for coordinator in entry.runtime_data.devices.values():
         await coordinator.disconnect()
 
     # Unload entries
@@ -139,7 +130,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_config_entry_device(
-    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+    hass: HomeAssistant, config_entry: PaxBleConfigEntry, device_entry: DeviceEntry
 ) -> bool:
     """Remove device from config entry. HA handles entity/device registry cleanup."""
     # Find MAC(s) matching this device entry via identifiers

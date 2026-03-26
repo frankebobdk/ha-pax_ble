@@ -12,7 +12,7 @@ from homeassistant.const import (
     CONCENTRATION_PARTS_PER_MILLION,
 )
 
-from .const import DOMAIN, CONF_NAME
+from .const import CONF_NAME
 from .const import DeviceModel
 from .entity import PaxCalimaEntity
 
@@ -78,7 +78,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         )
 
         # Find coordinator for this device
-        coordinator = hass.data[DOMAIN][config_entry.entry_id][CONF_DEVICES][device_id]
+        coordinator = config_entry.runtime_data.devices[device_id]
 
         # Create entities for this device
         for paxentity in ENTITIES:
