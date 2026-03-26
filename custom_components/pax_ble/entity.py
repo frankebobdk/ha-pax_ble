@@ -15,6 +15,8 @@ _LOGGER = logging.getLogger(__name__)
 class PaxCalimaEntity(CoordinatorEntity):
     """Pax Calima base entity class."""
 
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator: BaseCoordinator, paxentity):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
@@ -22,10 +24,8 @@ class PaxCalimaEntity(CoordinatorEntity):
         """Generic Entity properties"""
         self._attr_entity_category = paxentity.category
         self._attr_icon = paxentity.icon
-        self._attr_name = "{} {}".format(
-            self.coordinator.devicename, paxentity.entityName
-        )
-        self._attr_unique_id = "{}-{}".format(self.coordinator.device_id, self.name)
+        self._attr_name = paxentity.entityName
+        self._attr_unique_id = "{}-{}".format(self.coordinator.device_id, paxentity.key)
         self._attr_device_info = DeviceInfo(
             identifiers=self.coordinator.identifiers,
             connections={(dr.CONNECTION_BLUETOOTH, self.coordinator.fan._mac)},

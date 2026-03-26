@@ -1,7 +1,5 @@
 import logging
 
-from typing import Optional
-
 from .coordinator import BaseCoordinator
 from .devices.svensa import Svensa
 
@@ -9,7 +7,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class SvensaCoordinator(BaseCoordinator):
-    _fan: Optional[Svensa] = None  # This is basically a type hint
+    _fan: Svensa | None = None  # This is basically a type hint
 
     def __init__(
         self, hass, device, model, mac, pin, scan_interval, scan_interval_fast
@@ -151,26 +149,26 @@ class SvensaCoordinator(BaseCoordinator):
             AutomaticCycles = await self._fan.getAutomaticCycles()  # Configuration
             self._state["airing"] = AutomaticCycles.TimeMin
             self._state["fanspeed_airing"] = AutomaticCycles.Speed
-            _LOGGER.debug(f"Automatic cycles: {AutomaticCycles}")
+            _LOGGER.debug("Automatic cycles: %s", AutomaticCycles)
 
             ConstantOperation = await self._fan.getConstantOperation()  # Configuration
             self._state["trickle_on"] = ConstantOperation.Active
             self._state["fanspeed_trickle"] = ConstantOperation.Speed
-            _LOGGER.debug(f"Constant Op: {ConstantOperation}")
+            _LOGGER.debug("Constant Op: %s", ConstantOperation)
 
             FanMode = await self._fan.getMode()  # Configurations
             self._state["mode"] = FanMode
-            _LOGGER.debug(f"FanMode: {FanMode}")
+            _LOGGER.debug("FanMode: %s", FanMode)
 
             Humidity = await self._fan.getHumidity()  # Configuration
             self._state["fanspeed_humidity"] = Humidity.Speed
             self._state["sensitivity_humidity"] = Humidity.Level
-            _LOGGER.debug(f"Humidity: {Humidity}")
+            _LOGGER.debug("Humidity: %s", Humidity)
 
             PresenceGas = await self._fan.getPresenceGas()  # Configuration
             self._state["sensitivity_presence"] = PresenceGas.PresenceLevel
             self._state["sensitivity_gas"] = PresenceGas.GasLevel
-            _LOGGER.debug(f"PresenceGas: {PresenceGas}")
+            _LOGGER.debug("PresenceGas: %s", PresenceGas)
 
             Pause = await self._fan.getPause()
             self._state["pause"] = Pause.PauseActive
@@ -185,7 +183,7 @@ class SvensaCoordinator(BaseCoordinator):
             self._state["timer_runtime"] = TimeFunctions.PresenceTime
             self._state["timer_delay"] = TimeFunctions.TimeMin
             self._state["fanspeed_sensor"] = TimeFunctions.Speed
-            _LOGGER.debug(f"Time Functions: {TimeFunctions}")
+            _LOGGER.debug("Time Functions: %s", TimeFunctions)
 
             if disconnect:
                 await self._fan.disconnect()

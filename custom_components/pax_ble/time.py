@@ -29,7 +29,7 @@ CALIMA_ENTITIES = [
 ]
 
 
-async def async_setup_entry(hass, config_entry, async_add_devices):
+async def async_setup_entry(hass, config_entry, async_add_entities):
     """Setup switch from a config entry created in the integrations UI."""
     # Create entities
     ha_entities = []
@@ -56,7 +56,7 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
                 # Svensa does not support these entities
                 pass
 
-    async_add_devices(ha_entities, True)
+    async_add_entities(ha_entities, True)
 
 
 class PaxCalimaTimeEntity(PaxCalimaEntity, TimeEntity):
@@ -71,7 +71,7 @@ class PaxCalimaTimeEntity(PaxCalimaEntity, TimeEntity):
         """Return time value."""
         try:
             return self.coordinator.get_data(self._key)
-        except:
+        except Exception:
             return None
 
     async def async_set_value(self, value: time) -> None:

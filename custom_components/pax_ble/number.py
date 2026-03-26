@@ -126,7 +126,7 @@ RESTOREENTITIES = [
 ]
 
 
-async def async_setup_entry(hass, config_entry, async_add_devices):
+async def async_setup_entry(hass, config_entry, async_add_entities):
     """Setup numbers from a config entry created in the integrations UI."""
     # Create entities
     ha_entities = []
@@ -161,7 +161,7 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
         for paxentity in RESTOREENTITIES:
             ha_entities.append(PaxCalimaRestoreNumberEntity(coordinator, paxentity))
 
-    async_add_devices(ha_entities, True)
+    async_add_entities(ha_entities, True)
 
 
 class PaxCalimaNumberEntity(PaxCalimaEntity, NumberEntity):
@@ -184,7 +184,7 @@ class PaxCalimaNumberEntity(PaxCalimaEntity, NumberEntity):
         """Return number value."""
         try:
             return int(self.coordinator.get_data(self._key))
-        except:
+        except Exception:
             return None
 
     async def async_set_native_value(self, value):

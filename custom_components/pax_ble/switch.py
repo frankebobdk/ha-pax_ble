@@ -53,7 +53,7 @@ SVENSA_ENTITIES = [
 ]
 
 
-async def async_setup_entry(hass, config_entry, async_add_devices):
+async def async_setup_entry(hass, config_entry, async_add_entities):
     """Setup switch from a config entry created in the integrations UI."""
     # Create entities
     ha_entities = []
@@ -84,7 +84,7 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
                 for paxentity in SVENSA_ENTITIES:
                     ha_entities.append(PaxCalimaSwitchEntity(coordinator, paxentity))
 
-    async_add_devices(ha_entities, True)
+    async_add_entities(ha_entities, True)
 
 
 class PaxCalimaSwitchEntity(PaxCalimaEntity, SwitchEntity):

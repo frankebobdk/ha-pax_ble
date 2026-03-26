@@ -8,8 +8,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
-
 from homeassistant.const import CONF_DEVICES
 from .const import (
     DOMAIN,
@@ -76,8 +74,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up update listener
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
-    # Register services
-    hass.services.async_register(DOMAIN, "request_update", partial(service_request_update, hass))
+    # Register services (only once across all entries)
+    if not hass.services.has_service(DOMAIN, "request_update"):
+        hass.services.async_register(DOMAIN, "request_update", partial(service_request_update, hass))
 
     return True
 
@@ -96,14 +95,14 @@ async def service_request_update(hass, call: ServiceCall):
         _LOGGER.error("No device entry found for device ID %s", device_id)
         return
 
-    """Find the coordinator corresponding to the given device ID."""
-    coordinators = hass.data[DOMAIN].get(CONF_DEVICES, {})
-
-    # Iterate through all coordinators and check their device_id property
-    for coordinator in coordinators.values():
-        if getattr(coordinator, "device_id", None) == device_id:
-            await coordinator._async_update_data()
-            return
+    # Find the coordinator corresponding to the given device ID
+    for entry_id, entry_data in hass.data[DOMAIN].items():
+        if not isinstance(entry_data, dict) or CONF_DEVICES not in entry_data:
+            continue
+        for coordinator in entry_data[CONF_DEVICES].values():
+            if getattr(coordinator, "device_id", None) == device_id:
+                await coordinator._async_update_data()
+                return
 
     _LOGGER.warning("No coordinator found for device ID %s", device_id)
 
@@ -142,29 +141,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_config_entry_device(
     hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
 ) -> bool:
-    """Remove entities and device from HASS"""
-    device_id = device_entry.id
-    ent_reg = er.async_get(hass)
-    reg_entities = {}
-    for ent in er.async_entries_for_config_entry(ent_reg, config_entry.entry_id):
-        if device_id == ent.device_id:
-            reg_entities[ent.unique_id] = ent.entity_id
-    for entity_id in reg_entities.values():
-        ent_reg.async_remove(entity_id)
-    dev_reg = dr.async_get(hass)
-    dev_reg.async_remove_device(device_id)
-
-    """Remove from config_entry"""
-    devices = []
+    """Remove device from config entry. HA handles entity/device registry cleanup."""
+    # Find MAC(s) matching this device entry
+    macs_to_remove = []
     for dev_id, dev_config in config_entry.data[CONF_DEVICES].items():
         if dev_config[CONF_NAME] == device_entry.name:
-            devices.append(dev_config[CONF_MAC])
+            macs_to_remove.append(dev_config[CONF_MAC])
 
     new_data = config_entry.data.copy()
-    for dev in devices:
-        # Remove device from config entry
-        new_data[CONF_DEVICES].pop(dev)
+    for mac in macs_to_remove:
+        new_data[CONF_DEVICES].pop(mac, None)
     hass.config_entries.async_update_entry(config_entry, data=new_data)
-    hass.config_entries._async_schedule_save()
 
     return True

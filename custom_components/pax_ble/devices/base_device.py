@@ -74,7 +74,7 @@ class BaseDevice:
             try:
                 device = bluetooth.async_ble_device_from_address(self._hass, self._mac.upper())
                 if not device:
-                    raise BleakError(f"Device {self._mac} not found")
+                    raise BleakError("Device %s not found" % self._mac)
 
                 try:
                     await asyncio.wait_for(close_stale_connections(), timeout=5.0)
@@ -212,11 +212,11 @@ class BaseDevice:
 
     # --- Onwards to PAX characteristics
     async def setAuth(self, pin) -> None:
-        _LOGGER.debug(f"Connecting with pin: {pin}")
+        _LOGGER.debug("Connecting with pin: %s", pin)
         await self._writeUUID(self.chars[CHARACTERISTIC_PIN_CODE], pack("<I", int(pin)))
 
         result = await self.checkAuth()
-        _LOGGER.debug(f"Authorized: {result}")
+        _LOGGER.debug("Authorized: %s", result)
 
     async def getAuth(self) -> int:
         v = unpack("<I", await self._readUUID(self.chars[CHARACTERISTIC_PIN_CODE]))

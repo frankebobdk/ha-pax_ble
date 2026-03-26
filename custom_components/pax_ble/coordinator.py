@@ -1,5 +1,4 @@
 import asyncio
-import async_timeout
 import datetime as dt
 import logging
 
@@ -7,7 +6,6 @@ from abc import ABC, abstractmethod
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from typing import Optional
 
 from .devices.base_device import BaseDevice
 
@@ -24,7 +22,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
     _last_config_timestamp = None
 
     # Should be set by a child class
-    _fan: Optional[BaseDevice] = None  # This is basically a type hint
+    _fan: BaseDevice | None = None  # This is basically a type hint
 
     def __init__(
         self,
@@ -47,7 +45,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         self._normal_poll_interval = scan_interval
         self._fast_poll_interval = scan_interval_fast
 
-        self._fan: Optional[BaseDevice] = None  # Base class for Calima/Svensa
+        self._fan: BaseDevice | None = None  # Base class for Calima/Svensa
         self._device = device
         self._model = model
 
@@ -137,7 +135,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         # Fetch device info (once, on first successful poll)
         if not self._deviceInfoLoaded:
             try:
-                async with async_timeout.timeout(30):
+                async with asyncio.timeout(30):
                     if await self.read_deviceinfo(disconnect=False):
                         await self._async_update_device_info()
                         self._deviceInfoLoaded = True
@@ -149,7 +147,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         # Fetch config data (once per day)
         if dt.datetime.now().date() != self._last_config_timestamp:
             try:
-                async with async_timeout.timeout(30):
+                async with asyncio.timeout(30):
                     if await self.read_configdata(disconnect=False):
                         self._last_config_timestamp = dt.datetime.now().date()
             except asyncio.CancelledError:
@@ -159,7 +157,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
 
         # Fetch sensor data (every poll)
         try:
-            async with async_timeout.timeout(20):
+            async with asyncio.timeout(20):
                 success = await self.read_sensordata(disconnect=not self._fast_poll_enabled)
                 if success:
                     if self._consecutive_poll_failures > 0:

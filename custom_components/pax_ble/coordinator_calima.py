@@ -1,8 +1,6 @@
 import datetime as dt
 import logging
 
-from typing import Optional
-
 from .coordinator import BaseCoordinator
 from .devices.calima import Calima
 
@@ -10,7 +8,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class CalimaCoordinator(BaseCoordinator):
-    _fan: Optional[Calima] = None  # This is basically a type hint
+    _fan: Calima | None = None  # This is basically a type hint
 
     def __init__(
         self, hass, device, model, mac, pin, scan_interval, scan_interval_fast

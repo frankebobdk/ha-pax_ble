@@ -6,7 +6,7 @@ import voluptuous as vol
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -60,6 +60,7 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         self.config_entry = None
         self.accept_wrong_pin = False
 
+    @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         """Get the options flow for this handler."""
         return PaxOptionsFlowHandler()
@@ -81,7 +82,7 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle a flow initialized by the user, adding the integration."""
         errors = {}
 
@@ -93,7 +94,7 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle a flow initialized by bluetooth discovery."""
         _LOGGER.debug("Discovered device: %s", discovery_info.address)
         self.device_data[CONF_MAC] = dr.format_mac(discovery_info.address)
@@ -189,7 +190,6 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                         self.hass.config_entries.async_update_entry(
                             self.config_entry, data=new_data
                         )
-                        self.hass.config_entries._async_schedule_save()
 
                         await self.hass.config_entries.async_reload(
                             self.config_entry.entry_id
@@ -304,7 +304,6 @@ class PaxOptionsFlowHandler(OptionsFlow):
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data=new_data
                     )
-                    self.hass.config_entries._async_schedule_save()
                     await self.hass.config_entries.async_reload(
                         self.config_entry.entry_id
                     )
@@ -353,14 +352,14 @@ class PaxOptionsFlowHandler(OptionsFlow):
                 self.device_data[CONF_PIN] = result
             except Exception as e:
                 # Log the error and add a user-friendly message
-                _LOGGER.error(f"Error during pairing: {e}")
+                _LOGGER.error("Error during pairing: %s", e)
                 errors["base"] = "pairing_failed"
         else:
             # Handle connection failure
             errors["base"] = "connection_failed"
 
-        # Return the next step with any errors
-        return await self.async_step_add_device(errors=errors)
+        # Return to add_device step (errors shown on re-entry)
+        return await self.async_step_add_device()
 
     """##################################################
     ###################### WRONG PIN ####################
@@ -473,7 +472,6 @@ class PaxOptionsFlowHandler(OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
-            self.hass.config_entries._async_schedule_save()
 
             return self.async_abort(
                 reason="remove_success",
@@ -617,7 +615,7 @@ async def attempt_pair_device(hass, device_data):
             device_data[CONF_PIN] = result
             return True, None
         except Exception as e:
-            _LOGGER.error(f"Error during pairing: {e}")
+            _LOGGER.error("Error during pairing: %s", e)
             return False, str(e)
     else:
         return False, "cannot_connect"

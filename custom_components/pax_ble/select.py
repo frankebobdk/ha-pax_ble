@@ -132,7 +132,7 @@ SVENSA_ENTITIES = [
 ]
 
 
-async def async_setup_entry(hass, config_entry, async_add_devices):
+async def async_setup_entry(hass, config_entry, async_add_entities):
     """Setup selects from a config entry created in the integrations UI."""
     # Create entities
     ha_entities = []
@@ -152,17 +152,18 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
 
         # Device specific entities
         match coordinator._model:
-            case DeviceModel.CALIMA.value:
-                for paxentity in CALIMA_ENTITIES:
-                    ha_entities.append(PaxCalimaSelectEntity(coordinator, paxentity))
-            case DeviceModel.LEVANTE.value:
+            case (
+                DeviceModel.CALIMA.value
+                | DeviceModel.SVARA.value
+                | DeviceModel.LEVANTE.value
+            ):
                 for paxentity in CALIMA_ENTITIES:
                     ha_entities.append(PaxCalimaSelectEntity(coordinator, paxentity))
             case DeviceModel.SVENSA.value:
                 for paxentity in SVENSA_ENTITIES:
                     ha_entities.append(PaxCalimaSelectEntity(coordinator, paxentity))
 
-    async_add_devices(ha_entities, True)
+    async_add_entities(ha_entities, True)
 
 
 class PaxCalimaSelectEntity(PaxCalimaEntity, SelectEntity):
@@ -213,6 +214,3 @@ class PaxCalimaSelectEntity(PaxCalimaEntity, SelectEntity):
             """Restore value"""
             self.coordinator.set_data(self._key, old_value)
         self.async_schedule_update_ha_state(force_refresh=False)
-
-
-# type: ignore
