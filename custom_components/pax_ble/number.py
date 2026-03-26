@@ -2,14 +2,12 @@ import logging
 
 from collections import namedtuple
 from homeassistant.components.number import NumberDeviceClass, NumberEntity
-from homeassistant.const import CONF_DEVICES
 from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.const import REVOLUTIONS_PER_MINUTE
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import CONF_NAME
 from .const import DeviceModel
 from .entity import PaxCalimaEntity
 
@@ -131,14 +129,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # Create entities
     ha_entities = []
 
-    for device_id in config_entry.data[CONF_DEVICES]:
-        _LOGGER.debug(
-            "Starting paxcalima numbers: %s",
-            config_entry.data[CONF_DEVICES][device_id][CONF_NAME],
-        )
-
-        # Find coordinator for this device
-        coordinator = config_entry.runtime_data.devices[device_id]
+    for device_id, coordinator in config_entry.runtime_data.devices.items():
+        _LOGGER.debug("Starting paxcalima numbers: %s", coordinator.devicename)
 
         # Create entities for this device
         for paxentity in ENTITIES:

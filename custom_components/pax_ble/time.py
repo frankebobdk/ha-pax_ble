@@ -3,10 +3,8 @@ import logging
 from collections import namedtuple
 from datetime import time
 from homeassistant.components.time import TimeEntity
-from homeassistant.const import CONF_DEVICES
 from homeassistant.helpers.entity import EntityCategory
 
-from .const import CONF_NAME
 from .const import DeviceModel
 from .entity import PaxCalimaEntity
 
@@ -34,14 +32,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # Create entities
     ha_entities = []
 
-    for device_id in config_entry.data[CONF_DEVICES]:
-        _LOGGER.debug(
-            "Starting paxcalima times: %s",
-            config_entry.data[CONF_DEVICES][device_id][CONF_NAME],
-        )
-
-        # Find coordinator for this device
-        coordinator = config_entry.runtime_data.devices[device_id]
+    for device_id, coordinator in config_entry.runtime_data.devices.items():
+        _LOGGER.debug("Starting paxcalima times: %s", coordinator.devicename)
 
         # Device specific entities
         match coordinator._model:
