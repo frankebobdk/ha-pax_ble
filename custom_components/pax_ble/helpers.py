@@ -1,3 +1,5 @@
+import logging
+
 from .const import (
     CONF_NAME,
     CONF_MODEL,
@@ -9,6 +11,8 @@ from .const import (
 from .const import DeviceModel
 from .coordinator_calima import CalimaCoordinator
 from .coordinator_svensa import SvensaCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def getCoordinator(hass, device_data, dev):

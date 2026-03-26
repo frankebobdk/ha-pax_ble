@@ -184,7 +184,8 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                         )
                     else:
                         # Integration found, update with new device
-                        new_data = self.config_entry.data.copy()
+                        new_data = dict(self.config_entry.data)
+                        new_data[CONF_DEVICES] = dict(new_data[CONF_DEVICES])
                         new_data[CONF_DEVICES][dev_mac] = user_input
 
                         self.hass.config_entries.async_update_entry(
@@ -272,9 +273,9 @@ class PaxOptionsFlowHandler(OptionsFlow):
     ##################### ADD DEVICE ####################
     ##################################################"""
 
-    async def async_step_add_device(self, user_input=None):
+    async def async_step_add_device(self, user_input=None, errors=None):
         """Handler for adding device."""
-        errors = {}
+        errors = errors or {}
 
         if user_input is not None:
             if self.device_exists(dr.format_mac(user_input[CONF_MAC])):
@@ -298,7 +299,8 @@ class PaxOptionsFlowHandler(OptionsFlow):
 
                 if pin_verified:
                     # Add device to config entry
-                    new_data = self.config_entry.data.copy()
+                    new_data = dict(self.config_entry.data)
+                    new_data[CONF_DEVICES] = dict(new_data[CONF_DEVICES])
                     new_data[CONF_DEVICES][user_input[CONF_MAC]] = user_input
 
                     self.hass.config_entries.async_update_entry(
@@ -351,15 +353,12 @@ class PaxOptionsFlowHandler(OptionsFlow):
                 result = await fan.pair()
                 self.device_data[CONF_PIN] = result
             except Exception as e:
-                # Log the error and add a user-friendly message
                 _LOGGER.error("Error during pairing: %s", e)
                 errors["base"] = "pairing_failed"
         else:
-            # Handle connection failure
             errors["base"] = "connection_failed"
 
-        # Return to add_device step (errors shown on re-entry)
-        return await self.async_step_add_device()
+        return await self.async_step_add_device(errors=errors)
 
     """##################################################
     ###################### WRONG PIN ####################
@@ -424,7 +423,9 @@ class PaxOptionsFlowHandler(OptionsFlow):
 
         if user_input is not None:
             # Update device in config entry
-            new_data = self.config_entry.data.copy()
+            new_data = dict(self.config_entry.data)
+            new_data[CONF_DEVICES] = dict(new_data[CONF_DEVICES])
+            new_data[CONF_DEVICES][self.selected_device] = dict(new_data[CONF_DEVICES][self.selected_device])
             new_data[CONF_DEVICES][self.selected_device].update(user_input)
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
@@ -463,7 +464,8 @@ class PaxOptionsFlowHandler(OptionsFlow):
             ]
 
             # Remove device from config entry
-            new_data = self.config_entry.data.copy()
+            new_data = dict(self.config_entry.data)
+            new_data[CONF_DEVICES] = dict(new_data[CONF_DEVICES])
             new_data[CONF_DEVICES].pop(self.selected_device)
 
             await self.async_remove_device(

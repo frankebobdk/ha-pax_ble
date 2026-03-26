@@ -142,13 +142,14 @@ async def async_remove_config_entry_device(
     hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
 ) -> bool:
     """Remove device from config entry. HA handles entity/device registry cleanup."""
-    # Find MAC(s) matching this device entry
+    # Find MAC(s) matching this device entry via identifiers
     macs_to_remove = []
     for dev_id, dev_config in config_entry.data[CONF_DEVICES].items():
-        if dev_config[CONF_NAME] == device_entry.name:
+        if (DOMAIN, dev_config[CONF_MAC]) in device_entry.identifiers:
             macs_to_remove.append(dev_config[CONF_MAC])
 
-    new_data = config_entry.data.copy()
+    new_data = dict(config_entry.data)
+    new_data[CONF_DEVICES] = dict(new_data[CONF_DEVICES])
     for mac in macs_to_remove:
         new_data[CONF_DEVICES].pop(mac, None)
     hass.config_entries.async_update_entry(config_entry, data=new_data)
