@@ -114,11 +114,13 @@ class BaseDevice:
                     self._client = None
 
     async def _with_disconnect_on_error(self, coro):
+        client = self._client  # capture before await
         try:
             return await coro
         except Exception:
             _LOGGER.debug("GATT operation failed; disconnecting", exc_info=True)
-            await self.disconnect()
+            if self._client is client:
+                await self.disconnect()
             raise
 
     async def pair(self) -> str:
