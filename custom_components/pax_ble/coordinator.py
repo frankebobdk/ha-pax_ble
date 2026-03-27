@@ -95,29 +95,22 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
             await self._fan.disconnect()
 
     async def _safe_connect(self) -> bool:
-        """Connect with retry and validation. Returns True if connected."""
+        """Connect with validation of existing connections. Returns True if connected."""
         if not self._fan:
             return False
 
-        # Reuse existing valid connection
+        # Validate existing connection (may be stale)
         if self._fan.isConnected():
             if await self._fan.validate_connection():
                 return True
             _LOGGER.debug("Existing connection to %s failed validation", self.devicename)
 
-        # Try to connect with backoff
-        backoff = 1.0
-        for attempt in range(1, 4):
-            if await self._fan.connect(timeout=30):
-                if await self._fan.validate_connection():
-                    return True
-                _LOGGER.debug("New connection to %s failed validation", self.devicename)
-            if attempt < 3:
-                _LOGGER.debug("Connect attempt %d to %s failed, retrying in %ds",
-                             attempt, self.devicename, backoff)
-                await asyncio.sleep(backoff)
-                backoff *= 2
-        _LOGGER.warning("Failed to connect to %s after 3 attempts", self.devicename)
+        # Fresh connection — establish_connection handles retries internally
+        timeout = 45 if self._consecutive_poll_failures > 2 else 30
+        if await self._fan.connect(timeout=timeout):
+            return True
+
+        _LOGGER.warning("Failed to connect to %s", self.devicename)
         return False
 
     async def _async_update_data(self):
@@ -128,7 +121,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         # Fetch device info (once, on first successful poll)
         if not self._deviceInfoLoaded:
             try:
-                async with asyncio.timeout(30):
+                async with asyncio.timeout(45):
                     if await self.read_deviceinfo(disconnect=False):
                         await self._async_update_device_info()
                         self._deviceInfoLoaded = True
@@ -140,7 +133,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         # Fetch config data (once per day)
         if dt.datetime.now().date() != self._last_config_timestamp:
             try:
-                async with asyncio.timeout(30):
+                async with asyncio.timeout(45):
                     if await self.read_configdata(disconnect=False):
                         self._last_config_timestamp = dt.datetime.now().date()
             except asyncio.CancelledError:
@@ -150,7 +143,7 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
 
         # Fetch sensor data (every poll)
         try:
-            async with asyncio.timeout(20):
+            async with asyncio.timeout(30):
                 success = await self.read_sensordata(disconnect=not self._fast_poll_enabled)
                 if success:
                     if self._consecutive_poll_failures > 0:

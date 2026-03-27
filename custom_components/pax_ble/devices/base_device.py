@@ -86,24 +86,18 @@ class BaseDevice:
                 except Exception:
                     pass
 
-                self._client = await asyncio.wait_for(
-                    establish_connection(
-                        BleakClientWithServiceCache,
-                        device,
-                        name=getattr(self, "name", self._mac),
-                        disconnected_callback=self._handle_disconnect,
-                        use_services_cache=True,
-                        max_attempts=3,
-                        retry_interval=0.5,
-                    ),
+                self._client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    device,
+                    name=getattr(self, "name", self._mac),
+                    disconnected_callback=self._handle_disconnect,
+                    use_services_cache=True,
+                    max_attempts=5,
+                    retry_interval=1.0,
                     timeout=timeout,
                 )
                 _LOGGER.debug("Connected to %s", self._mac)
                 return True
-            except asyncio.TimeoutError:
-                _LOGGER.warning("Connection to %s timed out after %ds", self._mac, timeout)
-                self._client = None
-                return False
             except Exception as err:
                 _LOGGER.warning("Failed to connect %s: %s", self._mac, err)
                 self._client = None
