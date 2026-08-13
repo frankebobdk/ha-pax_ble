@@ -45,6 +45,11 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         # Adaptive poll backoff: tracks consecutive failed poll cycles
         self._consecutive_poll_failures = 0
         self._max_backoff = 600  # 10 minutes max poll interval
+        # Report failures to the coordinator (-> entities unavailable) only
+        # after this many consecutive failed polls. An occasional missed poll
+        # is normal for BLE and self-corrects on the next cycle; flapping
+        # every entity unavailable on one blip would make the signal useless.
+        self._failure_report_threshold = 3
 
         # Initialize state in case of new integration
         self._state = {}
@@ -173,7 +178,17 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         self._consecutive_poll_failures = min(self._consecutive_poll_failures + 1, 20)
         _LOGGER.debug("Poll failure %d for %s", self._consecutive_poll_failures, self.devicename)
         self.setNormalPollMode()
-        raise UpdateFailed("Failed to read sensor data from %s" % self.devicename)
+
+        # Below the report threshold, return the last known state instead of
+        # raising: returning is how the coordinator signals a successful poll,
+        # so entities stay available on the value last read. The staleness is
+        # bounded to threshold-1 polls; a sustained outage is reported below.
+        if self._consecutive_poll_failures < self._failure_report_threshold:
+            return self._state
+        raise UpdateFailed(
+            "No successful read from %s in %d consecutive attempts"
+            % (self.devicename, self._consecutive_poll_failures)
+        )
 
     async def _async_update_device_info(self) -> None:
         device_registry = dr.async_get(self.hass)
