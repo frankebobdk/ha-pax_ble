@@ -9,6 +9,7 @@ from collections import namedtuple
 import logging
 import asyncio
 from bleak_retry_connector import (
+    clear_cache,
     establish_connection,
     BleakClientWithServiceCache,
     close_stale_connections,
@@ -157,9 +158,25 @@ class BaseDevice:
                 )
             return True
         except Exception as e:
-            _LOGGER.debug("Connection validation failed for %s: %s", self._mac, e)
-            # Disconnect properly under the lock
+            _LOGGER.warning(
+                "Connection validation failed for %s (%s) - disconnecting and "
+                "clearing the GATT cache before the caller reconnects",
+                self._mac,
+                e,
+            )
+            # Tear the link down, never abandon it: dropping the client while
+            # the ACL stays up leaves the fan captive to a dead connection
+            # (these devices hold one link), so every retry fails until the
+            # ACL times out.
             await self.disconnect()
+            # A stale BlueZ service cache can hide SENSOR_DATA from a
+            # perfectly healthy fan. Best-effort: BlueZ-side fix, backends
+            # without a cache (ESPHome proxies) pass straight through. The
+            # fresh connect that follows in _safe_connect is the retry.
+            try:
+                await clear_cache(self._mac)
+            except Exception:
+                _LOGGER.debug("clear_cache failed for %s", self._mac, exc_info=True)
             return False
 
     def _bToStr(self, val) -> str:
