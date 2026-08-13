@@ -73,7 +73,15 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         self._fast_poll_enabled = True
         self._fast_poll_count = 0
         self.update_interval = dt.timedelta(seconds=self._fast_poll_interval)
-        self.async_request_refresh()
+
+        # Assigning update_interval only stores the value - the coordinator's
+        # setter does not re-arm the already-scheduled refresh, so the next poll
+        # would still land at the old interval (up to scan_interval away) and
+        # values just written to the device would keep reading stale.
+        # Deliberately NOT async_request_refresh(): polling immediately reads
+        # the device before it has applied the write, and the stale result
+        # overwrites the optimistically published state.
+        self._schedule_refresh()
 
     def setNormalPollMode(self):
         """Return to normal polling, with backoff if there have been failures."""
@@ -88,6 +96,11 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
         else:
             interval = self._normal_poll_interval
         self.update_interval = dt.timedelta(seconds=interval)
+
+        # Same re-arm as setFastPollMode(): assigning update_interval only
+        # stores the value, so the pending tick would still fire once at
+        # the old (fast) interval before the normal interval takes effect.
+        self._schedule_refresh()
 
     async def disconnect(self):
         """Disconnect from device."""
@@ -187,6 +200,13 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
     def set_data(self, key, value):
         _LOGGER.debug("Set_Data: %s %s", key, value)
         self._state[key] = value
+
+        # Publish straight away. Callers set the value here and only tell Home
+        # Assistant after the device write returns, which leaves the state
+        # machine reporting the old value for the whole duration of that write
+        # (0.4-0.8s measured upstream) - the frontend toggle visibly snaps
+        # back and forth without this.
+        self.async_update_listeners()
 
     async def read_deviceinfo(self, disconnect=False) -> bool:
         _LOGGER.debug("Reading device information")
