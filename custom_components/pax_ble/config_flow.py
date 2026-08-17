@@ -35,6 +35,7 @@ from .const import (
 )
 from .const import DEFAULT_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_FAST
 from .const import DeviceModel
+from .device_lookup import device_in_map
 from .helpers import getCoordinator
 
 CONFIG_ENTRY_NAME = "Pax BLE"
@@ -74,11 +75,11 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
     def device_exists(self, device_key: str) -> bool:
         self.config_entry = self.get_pax_config_entry(CONFIG_ENTRY_NAME)
-        if self.config_entry is not None:
-            if CONF_DEVICES in self.config_entry.data:
-                if device_key in self.config_entry.data[CONF_DEVICES]:
-                    return True
-        return False
+        if self.config_entry is None:
+            return False
+        return device_in_map(
+            self.config_entry.data.get(CONF_DEVICES), device_key, dr.format_mac
+        )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -166,13 +167,19 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                 await fan.disconnect()
 
                 if pin_verified:
+                    # Store the normalized MAC as CONF_MAC too, not just as the
+                    # dict key: it becomes the device registry identifier and
+                    # the address we connect to.
+                    device_cfg = dict(user_input)
+                    device_cfg[CONF_MAC] = dev_mac
+
                     """Make sure integration is installed"""
                     self.config_entry = self.get_pax_config_entry(CONFIG_ENTRY_NAME)
                     if self.config_entry is None:
                         # No integration installed, add entry with new device
                         await self.async_set_unique_id(CONFIG_ENTRY_NAME)
                         new_data = {CONF_DEVICES: {}}
-                        new_data[CONF_DEVICES][dev_mac] = user_input
+                        new_data[CONF_DEVICES][dev_mac] = device_cfg
                         _LOGGER.debug("Creating config entry: %s", new_data)
 
                         return self.async_create_entry(
@@ -186,7 +193,7 @@ class PaxConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                         # Integration found, update with new device
                         new_data = dict(self.config_entry.data)
                         new_data[CONF_DEVICES] = dict(new_data[CONF_DEVICES])
-                        new_data[CONF_DEVICES][dev_mac] = user_input
+                        new_data[CONF_DEVICES][dev_mac] = device_cfg
 
                         self.hass.config_entries.async_update_entry(
                             self.config_entry, data=new_data
@@ -265,9 +272,9 @@ class PaxOptionsFlowHandler(OptionsFlow):
         return self.async_show_form(step_id="init", data_schema=CONFIGURE_SCHEMA)
 
     def device_exists(self, device_key) -> bool:
-        if device_key in self.config_entry.data[CONF_DEVICES]:
-            return True
-        return False
+        return device_in_map(
+            self.config_entry.data.get(CONF_DEVICES), device_key, dr.format_mac
+        )
 
     """##################################################
     ##################### ADD DEVICE ####################
@@ -278,15 +285,16 @@ class PaxOptionsFlowHandler(OptionsFlow):
         errors = errors or {}
 
         if user_input is not None:
-            if self.device_exists(dr.format_mac(user_input[CONF_MAC])):
+            dev_mac = dr.format_mac(user_input[CONF_MAC])
+            if self.device_exists(dev_mac):
                 return self.async_abort(
                     reason="already_configured",
                     description_placeholders={
-                        "dev_name": user_input[CONF_MAC],
+                        "dev_name": dev_mac,
                     },
                 )
 
-            fan = BaseDevice(self.hass, user_input[CONF_MAC], user_input[CONF_PIN])
+            fan = BaseDevice(self.hass, dev_mac, user_input[CONF_PIN])
 
             if await fan.connect():
                 await fan.setAuth(user_input[CONF_PIN])
@@ -298,10 +306,16 @@ class PaxOptionsFlowHandler(OptionsFlow):
                 await fan.disconnect()
 
                 if pin_verified:
+                    # Store the normalized MAC as both key and CONF_MAC, so a
+                    # later discovery (which always formats) recognizes this
+                    # device instead of offering it as a new one.
+                    device_cfg = dict(user_input)
+                    device_cfg[CONF_MAC] = dev_mac
+
                     # Add device to config entry
                     new_data = dict(self.config_entry.data)
                     new_data[CONF_DEVICES] = dict(new_data[CONF_DEVICES])
-                    new_data[CONF_DEVICES][user_input[CONF_MAC]] = user_input
+                    new_data[CONF_DEVICES][dev_mac] = device_cfg
 
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data=new_data
@@ -313,9 +327,7 @@ class PaxOptionsFlowHandler(OptionsFlow):
                     return self.async_abort(
                         reason="add_success",
                         description_placeholders={
-                            "dev_name": new_data[CONF_DEVICES][user_input[CONF_MAC]][
-                                CONF_NAME
-                            ],
+                            "dev_name": new_data[CONF_DEVICES][dev_mac][CONF_NAME],
                         },
                     )
                 else:
