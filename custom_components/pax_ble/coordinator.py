@@ -118,14 +118,21 @@ class BaseCoordinator(DataUpdateCoordinator, ABC):
             return False
 
         # Validate existing connection (may be stale)
+        use_services_cache = True
         if self._fan.isConnected():
             if await self._fan.validate_connection():
                 return True
             _LOGGER.debug("Existing connection to %s failed validation", self.devicename)
+            # validate_connection() tore the link down and tried to clear the
+            # GATT cache. If that clear failed - or the backend has no cache -
+            # reusing the services cache would hand back the same stale
+            # service collection that just failed the membership check, so
+            # the recovery reconnect always requests fresh discovery.
+            use_services_cache = False
 
         # Fresh connection — establish_connection handles retries internally
         timeout = 45 if self._consecutive_poll_failures > 2 else 30
-        if await self._fan.connect(timeout=timeout):
+        if await self._fan.connect(timeout=timeout, use_services_cache=use_services_cache):
             return True
 
         _LOGGER.warning("Failed to connect to %s", self.devicename)

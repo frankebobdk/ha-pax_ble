@@ -70,8 +70,13 @@ class BaseDevice:
         await self.setAuth(self._pin)
 
 
-    async def connect(self, timeout: int = 45) -> bool:
-        """Establish a reliable connection using bleak-retry-connector."""
+    async def connect(self, timeout: int = 45, use_services_cache: bool = True) -> bool:
+        """Establish a reliable connection using bleak-retry-connector.
+
+        use_services_cache=False forces a fresh service discovery - used by
+        the validation-recovery path, where a stale cache may be the reason
+        the previous connection failed the membership check.
+        """
         async with self._connect_lock:
             # Already connected (or another caller just connected while we waited)?
             if self._client and self._client.is_connected:
@@ -92,7 +97,7 @@ class BaseDevice:
                     device,
                     name=getattr(self, "name", self._mac),
                     disconnected_callback=self._handle_disconnect,
-                    use_services_cache=True,
+                    use_services_cache=use_services_cache,
                     max_attempts=5,
                     retry_interval=1.0,
                     timeout=timeout,
@@ -173,10 +178,19 @@ class BaseDevice:
             # perfectly healthy fan. Best-effort: BlueZ-side fix, backends
             # without a cache (ESPHome proxies) pass straight through. The
             # fresh connect that follows in _safe_connect is the retry.
+            # clear_cache() reports failure by returning False rather than
+            # raising, and is a no-op on backends without a cache.
+            cache_cleared = False
             try:
-                await clear_cache(self._mac)
+                cache_cleared = bool(await clear_cache(self._mac))
             except Exception:
-                _LOGGER.debug("clear_cache failed for %s", self._mac, exc_info=True)
+                _LOGGER.debug("clear_cache raised for %s", self._mac, exc_info=True)
+            if not cache_cleared:
+                _LOGGER.debug(
+                    "GATT cache for %s was not cleared - no cache on this "
+                    "backend, or the clear failed",
+                    self._mac,
+                )
             return False
 
     def _bToStr(self, val) -> str:
