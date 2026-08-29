@@ -4,14 +4,13 @@ from collections import namedtuple
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.const import UnitOfVolumeFlowRate, UnitOfTemperature, UnitOfTime
-from homeassistant.const import UnitOfRatio
 from homeassistant.const import (
     LIGHT_LUX,
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
 )
 
-from .const import DeviceModel
+from .const import DeviceModel, PARTS_PER_MILLION
 from .entity import PaxCalimaEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ SVENSA_ENTITIES = [
     PaxEntity(
         "airquality",
         "Air Quality",
-        UnitOfRatio.PARTS_PER_MILLION,
+        PARTS_PER_MILLION,
         SensorDeviceClass.CO2,
         None,
         None,
